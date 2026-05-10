@@ -1,0 +1,13 @@
+groq>=0.13.0
+python-dotenv>=1.0.1
+jupyter>=1.0.0
+ipykernel>=6.29.0
+
+# Sprint 2 (RAG)
+# chromadb>=0.5.0
+# sentence-transformers>=3.0.0  # embeddings open-source
+# tiktoken>=0.7.0
+
+# Sprint 3 (LangGraph multi-agente)
+# langgraph>=0.2.0
+# langchain-groq>=0.2.0

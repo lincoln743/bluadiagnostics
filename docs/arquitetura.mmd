@@ -1,0 +1,44 @@
+%%{init: {'theme':'default', 'flowchart':{'curve':'basis'}}}%%
+flowchart TD
+    U([👤 Beneficiário<br/>app Blua]) --> E[Camada de Entrada<br/>validação + pseudonimização]
+    E --> R{Roteador de Intents}
+
+    R -->|check-up| LLM
+    R -->|dúvida clínica| LLM
+    R -->|prescrição| LLM
+    R -->|agendamento| LLM
+    R -->|fora de escopo| OOS[Refusal cortês +<br/>redirecionamento]
+
+    LLM[🧠 Núcleo LLM<br/>Claude Sonnet 4.5<br/>+ System Prompt]
+    LLM <--> MEM[(💾 Memória de Sessão<br/>20 turnos)]
+    LLM --> RAG[(📚 RAG<br/>ChromaDB<br/>5 docs curados)]
+    LLM --> FC{Function Calling}
+
+    FC --> T1[🔍 consultar_historico_paciente]
+    FC --> T2[💊 verificar_interacoes_medicamentosas]
+    FC --> T3[📅 agendar_teleconsulta]
+
+    RAG --> G[🛡️ Guardrails de Saída]
+    T1 --> G
+    T2 --> G
+    T3 --> G
+    OOS --> G
+
+    G --> RF{Red flag<br/>detectada?}
+    RF -->|sim| ESC[🚨 Escalada urgente<br/>192/SAMU + teleconsulta imediata]
+    RF -->|não| OUT[💬 Resposta ao usuário<br/>com disclaimer]
+
+    ESC --> RESP([📱 Saída no app Blua])
+    OUT --> RESP
+
+    classDef llm fill:#3b82f6,stroke:#1e40af,color:#fff
+    classDef tool fill:#10b981,stroke:#047857,color:#fff
+    classDef guard fill:#f59e0b,stroke:#b45309,color:#fff
+    classDef alert fill:#ef4444,stroke:#991b1b,color:#fff
+    classDef store fill:#8b5cf6,stroke:#5b21b6,color:#fff
+
+    class LLM llm
+    class T1,T2,T3 tool
+    class G,RF guard
+    class ESC alert
+    class MEM,RAG store

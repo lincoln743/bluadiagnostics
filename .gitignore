@@ -1,0 +1,50 @@
+# Segredos
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.cert
+secrets/
+credentials/
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtualenvs
+.venv/
+venv/
+env/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Vector store (Sprint 2)
+chroma_db/
+*.chroma/
+embeddings_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Logs
+*.log
+logs/
+tmp/
+temp/
+
+# Coverage
+.coverage
+htmlcov/
+.pytest_cache/

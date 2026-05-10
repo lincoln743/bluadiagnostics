@@ -1,0 +1,127 @@
+================================================================
+CHALLENGE CARE PLUS — BLUADIAGNOSTICS
+SPRINT 1: EXPLORACAO, ARQUITETURA E PROVA DE CONCEITO
+================================================================
+
+DISCIPLINA: Prompt Engineering and Artificial Intelligence
+INSTITUICAO: FIAP
+PROFESSOR:   Jorge Luiz Gomes
+GRUPO:       NextGen
+DATA:        10/05/2026
+
+----------------------------------------------------------------
+INTEGRANTES
+----------------------------------------------------------------
+Gustavo Franzoti Goncalves   - RM 566983
+Lincoln Simao Pereira        - RM 567284
+Maykon Santana Fonseca       - RM 567041
+Nicolas Sakaue Nishimura     - RM 567752
+
+----------------------------------------------------------------
+LINK DO REPOSITORIO GITHUB
+----------------------------------------------------------------
+https://github.com/lincoln743/bluadiagnostics
+
+Mantenedor: Lincoln Simao Pereira
+Contato:    lincoln743@gmail.com
+
+----------------------------------------------------------------
+ARTEFATOS DA SPRINT 1 (CAMINHOS NO REPOSITORIO)
+----------------------------------------------------------------
+[1] README:
+    /README.md
+
+[2] Fluxograma da arquitetura:
+    /docs/arquitetura.svg
+    /docs/arquitetura.mmd  (fonte Mermaid)
+
+[3] System prompt:
+    /prompts/system_prompt.md
+
+[4] Eval set (12 casos: 4 happy_path, 3 red_flag, 3 jailbreak,
+    2 out_of_scope):
+    /evals/sprint1_eval_set.json
+
+[5] Especificacao das tools (3 tools em JSON Schema):
+    /tools/tools_spec.json
+
+[6] Notebook PoC executavel (Colab/local):
+    /notebooks/sprint1_poc.ipynb
+
+[7] Base de conhecimento inicial para RAG (5 documentos):
+    /kb/kb01_protocolo_manchester.md
+    /kb/kb02_bulas_resumidas.md
+    /kb/kb03_politica_telemedicina.md
+    /kb/kb04_cartilha_beneficiario.md
+    /kb/kb05_red_flags.md
+
+[8] Auxiliares:
+    /requirements.txt
+    /.env.example
+    /.gitignore  (bloqueia .env, *.key, secrets/)
+
+----------------------------------------------------------------
+DECISOES TECNICAS PRINCIPAIS
+----------------------------------------------------------------
+- Persona: beneficiario final em autoavaliacao clinica.
+- Modelo: Llama 3.3 70B Versatile via Groq API (LPU).
+  Comparativo com OpenAI GPT-4.1 documentado no README.
+- Justificativa: latencia ultrabaixa (~300ms TTFT, 10x mais
+  rapido que GPU tradicional), custo zero no tier gratuito,
+  open weights (viabiliza on-premise para LGPD), function
+  calling estruturado nativo.
+- Framework: SDK nativo Groq na Sprint 1.
+  LangGraph previsto para Sprint 3 (multi-agente).
+- Vector store (Sprint 2): ChromaDB +
+  sentence-transformers (open-source).
+- Princípio HITL obrigatorio:
+  agente nao diagnostica nem prescreve.
+- Conformidade LGPD: pseudonimizacao (BNF-XXXXX),
+  sem PII em logs, segredos via .env / Colab Secrets.
+
+----------------------------------------------------------------
+COMO EXECUTAR A POC
+----------------------------------------------------------------
+Opcao A - Google Colab (recomendado):
+  1. Obter chave Groq gratuita: https://console.groq.com/keys
+  2. Upload do notebook /notebooks/sprint1_poc.ipynb
+  3. Em "Secrets", criar GROQ_API_KEY com sua chave
+  4. Executar todas as celulas
+
+Opcao B - Local:
+  git clone https://github.com/lincoln743/bluadiagnostics.git
+  cd bluadiagnostics
+  python -m venv .venv && source .venv/bin/activate
+  pip install -r requirements.txt
+  cp .env.example .env  # cole sua GROQ_API_KEY
+  jupyter notebook notebooks/sprint1_poc.ipynb
+
+----------------------------------------------------------------
+EVIDENCIAS DE ATENDIMENTO AOS CRITERIOS
+----------------------------------------------------------------
+Criterio (40%) Arquitetura, persona, stack:
+  - README com persona justificada, comparativo de modelos
+    e mapeamento de riscos LGPD/clinicos
+  - Fluxograma SVG em /docs
+
+Criterio (30%) PoC funcional:
+  - Notebook com system prompt aplicado, memoria multi-turno
+    (4+ turnos) e function calling em 3 tools, demonstrado
+    end-to-end
+
+Criterio (30%) Eval set, system prompt e riscos:
+  - Eval set com 12 casos cobrindo as 4 categorias exigidas
+  - System prompt com 5 secoes demarcadas (PAPEL, ESCOPO,
+    RESTRICOES, FORMATO_DE_SAIDA, ESCALADA_HUMANA)
+  - Riscos clinicos, eticos e LGPD documentados no README
+
+----------------------------------------------------------------
+SEGURANCA
+----------------------------------------------------------------
+- Nenhuma API key esta versionada
+- .gitignore bloqueia .env e arquivos sensiveis
+- Pseudonimizacao implementada nas tools simuladas
+
+================================================================
+FIM
+================================================================

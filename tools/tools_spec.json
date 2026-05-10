@@ -1,0 +1,121 @@
+[
+  {
+    "name": "consultar_historico_paciente",
+    "description": "Consulta o histórico clínico do beneficiário Care Plus por ID pseudonimizado. Retorna condições crônicas, alergias, medicamentos em uso, últimas consultas e exames recentes. Usar SEMPRE antes de fornecer orientação personalizada ou de invocar verificar_interacoes_medicamentosas.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "paciente_id": {
+          "type": "string",
+          "description": "ID pseudonimizado do beneficiário no formato BNF-XXXXX (ex.: BNF-04821).",
+          "pattern": "^BNF-[0-9]{5}$"
+        },
+        "campos": {
+          "type": "array",
+          "description": "Subconjunto de campos a retornar. Se omitido, retorna todos.",
+          "items": {
+            "type": "string",
+            "enum": ["condicoes_cronicas", "alergias", "medicamentos_em_uso", "consultas_recentes", "exames_recentes", "vacinas"]
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": ["paciente_id"]
+    }
+  },
+  {
+    "name": "verificar_interacoes_medicamentosas",
+    "description": "Verifica interações entre uma lista de medicamentos. Retorna pares de interações com nível de gravidade (leve, moderada, grave, contraindicada), mecanismo e recomendação clínica. Usar quando o médico (humano) já prescreveu e o sistema precisa validar a combinação antes de finalizar a prescrição.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "medicamentos": {
+          "type": "array",
+          "description": "Lista de medicamentos a verificar. Mínimo 2.",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "properties": {
+              "nome": {
+                "type": "string",
+                "description": "Nome genérico ou comercial (ex.: 'losartana', 'AAS 100mg')."
+              },
+              "dose": {
+                "type": "string",
+                "description": "Dose por administração (ex.: '50mg')."
+              },
+              "frequencia": {
+                "type": "string",
+                "description": "Frequência (ex.: '1x ao dia', 'de 8/8h')."
+              }
+            },
+            "required": ["nome"]
+          }
+        },
+        "paciente_id": {
+          "type": "string",
+          "description": "ID pseudonimizado do paciente para considerar comorbidades.",
+          "pattern": "^BNF-[0-9]{5}$"
+        },
+        "aprovado_por_medico": {
+          "type": "boolean",
+          "description": "OBRIGATÓRIO ser true quando a verificação ocorre no fluxo de emissão de prescrição. False apenas em consulta educativa do beneficiário sobre medicamentos que JÁ usa."
+        }
+      },
+      "required": ["medicamentos", "aprovado_por_medico"]
+    }
+  },
+  {
+    "name": "agendar_teleconsulta",
+    "description": "Agenda teleconsulta na rede Care Plus. Retorna o ID da consulta, profissional alocado, link da sala virtual e horário confirmado. Em emergências (urgencia=imediata), prioriza a primeira janela disponível em até 15 minutos.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "paciente_id": {
+          "type": "string",
+          "description": "ID pseudonimizado do beneficiário.",
+          "pattern": "^BNF-[0-9]{5}$"
+        },
+        "especialidade": {
+          "type": "string",
+          "description": "Especialidade médica. Care Plus oferece 8 especialidades em telemedicina.",
+          "enum": [
+            "clinica_geral",
+            "pediatria",
+            "ginecologia",
+            "cardiologia",
+            "psiquiatria",
+            "psicologia",
+            "dermatologia",
+            "endocrinologia"
+          ]
+        },
+        "urgencia": {
+          "type": "string",
+          "description": "Nível de urgência. 'imediata' aciona janela em até 15 min; 'hoje' até 4h; 'rotina' próximo horário disponível.",
+          "enum": ["imediata", "hoje", "24h", "rotina"]
+        },
+        "janela_preferencial": {
+          "type": "object",
+          "description": "Faixa de horário preferida pelo beneficiário (ignorada se urgencia=imediata).",
+          "properties": {
+            "data_inicio": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "data_fim": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        },
+        "motivo_resumido": {
+          "type": "string",
+          "description": "Resumo de até 280 caracteres com sintomas/motivo da consulta, para o médico se preparar.",
+          "maxLength": 280
+        }
+      },
+      "required": ["paciente_id", "especialidade", "urgencia", "motivo_resumido"]
+    }
+  }
+]
