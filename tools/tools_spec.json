@@ -1,14 +1,13 @@
 [
   {
     "name": "consultar_historico_paciente",
-    "description": "Consulta o histórico clínico do beneficiário Care Plus por ID pseudonimizado. Retorna condições crônicas, alergias, medicamentos em uso, últimas consultas e exames recentes. Usar SEMPRE antes de fornecer orientação personalizada ou de invocar verificar_interacoes_medicamentosas.",
+    "description": "Consulta o histórico clínico do beneficiário Care Plus por ID pseudonimizado (formato BNF-XXXXX, onde X são dígitos numéricos). Retorna condições crônicas, alergias, medicamentos em uso, últimas consultas e exames recentes. Usar SEMPRE antes de fornecer orientação personalizada ou de invocar verificar_interacoes_medicamentosas.",
     "input_schema": {
       "type": "object",
       "properties": {
         "paciente_id": {
           "type": "string",
-          "description": "ID pseudonimizado do beneficiário no formato BNF-XXXXX (ex.: BNF-04821).",
-          "pattern": "^BNF-[0-9]{5}$"
+          "description": "ID pseudonimizado do beneficiário no formato BNF-XXXXX, onde XXXXX são 5 dígitos numéricos (ex.: BNF-04821). Se o usuário não forneceu ID, use o valor que ele informou ou solicite-o."
         },
         "campos": {
           "type": "array",
@@ -54,8 +53,7 @@
         },
         "paciente_id": {
           "type": "string",
-          "description": "ID pseudonimizado do paciente para considerar comorbidades.",
-          "pattern": "^BNF-[0-9]{5}$"
+          "description": "ID pseudonimizado do paciente para considerar comorbidades."
         },
         "aprovado_por_medico": {
           "type": "boolean",
@@ -73,8 +71,7 @@
       "properties": {
         "paciente_id": {
           "type": "string",
-          "description": "ID pseudonimizado do beneficiário.",
-          "pattern": "^BNF-[0-9]{5}$"
+          "description": "ID pseudonimizado do beneficiário."
         },
         "especialidade": {
           "type": "string",

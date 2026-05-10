@@ -142,20 +142,21 @@ Agente que sugere prescrições com base no histórico, **valida interações me
 
 <br>
 
-| Critério | 🟢 **Groq + Llama 3.3 70B** | OpenAI GPT-4.1 |
-|---|---|---|
-| Custo entrada/1M tokens | **🆓 Gratuito** (tier free) | US$ 2,00 |
-| Custo saída/1M tokens | **🆓 Gratuito** (tier free) | US$ 8,00 |
-| **Latência (TTFT)** | **⚡ ~0,3 s** (LPU dedicada) | ~1,2 s |
-| **Throughput** | **~280 tokens/s** | ~80 tokens/s |
-| Janela de contexto | 128k tokens | 1M tokens |
-| Function calling estruturado | ✅ Suporte nativo | ✅ Suporte nativo |
-| Adequação clínica | ✅ Llama 3.3 com guardrails de segurança | ✅ RLHF maduro |
-| Privacidade (API) | ✅ Não treina com dados (tier free) | ✅ Não treina com dados |
-| Acessibilidade acadêmica | ✅ **Free tier amplo** (30 req/min) | Pago desde o primeiro request |
-| Open weights | ✅ Llama é open source | ❌ Proprietário |
+| Critério | 🟢 **Groq + Llama 3.1 8B Instant** (PoC) | Groq + Llama 3.3 70B (produção) | OpenAI GPT-4.1 |
+|---|---|---|---|
+| Custo entrada/1M tokens | **🆓 Gratuito** (tier free) | **🆓 Gratuito** (tier free) | US$ 2,00 |
+| Custo saída/1M tokens | **🆓 Gratuito** (tier free) | **🆓 Gratuito** (tier free) | US$ 8,00 |
+| **Latência (TTFT)** | **⚡ ~0,2 s** (LPU dedicada) | ~0,3 s (LPU dedicada) | ~1,2 s |
+| **Throughput** | **~750 tokens/s** | ~280 tokens/s | ~80 tokens/s |
+| Janela de contexto | 128k tokens | 128k tokens | 1M tokens |
+| Tokens/dia (tier free) | **500k tokens/dia** | 100k tokens/dia | — |
+| Function calling estruturado | ✅ Suporte nativo | ✅ Suporte nativo | ✅ Suporte nativo |
+| Adequação clínica | ✅ Suficiente para triagem com guardrails | ✅ Llama 3.3 com guardrails avançados | ✅ RLHF maduro |
+| Privacidade (API) | ✅ Não treina com dados | ✅ Não treina com dados | ✅ Não treina com dados |
+| Acessibilidade acadêmica | ✅ **Free tier amplo** | ✅ Free tier (limites menores) | Pago desde o primeiro request |
+| Open weights | ✅ Llama é open source | ✅ Llama é open source | ❌ Proprietário |
 
-**🏆 Decisão:** Groq + Llama 3.3 70B pela combinação de **custo zero, latência ultrabaixa (LPU dedicada — 10× mais rápido que GPU tradicional), function calling estruturado e modelo open-weight**. A escolha alinha-se ao princípio de **acessibilidade e reprodutibilidade** essencial em projeto acadêmico, sem comprometer a qualidade clínica do agente. Em produção real Care Plus, o mesmo SDK pode ser apontado para infraestrutura própria com Llama on-premise — viabilizando privacidade total sem dependência externa.
+**🏆 Decisão:** Para a Sprint 1 (PoC), adotamos **Groq + Llama 3.1 8B Instant** pela combinação de **custo zero, latência ultrabaixa (~200ms TTFT), function calling nativo estável e cota generosa (500k tokens/dia)**, viabilizando ciclos rápidos de iteração e teste. Para produção real Care Plus, o **Llama 3.3 70B** (também via Groq ou on-premise) seria adotado pela maior precisão clínica em casos complexos, mantendo a mesma infraestrutura LPU e SDK. A escolha pelo Llama (sobre OpenAI) alinha-se ao princípio de **acessibilidade, reprodutibilidade acadêmica e privacidade**: os pesos abertos viabilizam deployment on-premise em produção, sem dependência externa para dados de saúde sensíveis.
 
 </details>
 
