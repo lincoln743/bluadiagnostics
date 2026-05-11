@@ -1,0 +1,1 @@
+../../kb/kb02_bulas_resumidas.md

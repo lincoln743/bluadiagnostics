@@ -1,13 +1,34 @@
-groq>=0.13.0
+# BluaDiagnostics Sprint 2 — Dependências
+# Para instalação: pip install -r requirements.txt
+# Para desenvolvimento completo: pip install -e ".[dev]"
+
+# Core LLM
+groq>=0.11.0
+openai>=1.50.0
+
+# LangChain / LangGraph
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-community>=0.3.0
+langgraph>=0.2.40
+
+# RAG
+chromadb>=0.5.0
+sentence-transformers>=3.0.0
+
+# Interface
+streamlit>=1.38.0
+
+# Utilitários
 python-dotenv>=1.0.1
-jupyter>=1.0.0
-ipykernel>=6.29.0
+pydantic>=2.9.0
+tenacity>=9.0.0
+rich>=13.8.0
+typer>=0.12.0
 
-# Sprint 2 (RAG)
-# chromadb>=0.5.0
-# sentence-transformers>=3.0.0  # embeddings open-source
-# tiktoken>=0.7.0
+# Observabilidade
+langsmith>=0.1.130
 
-# Sprint 3 (LangGraph multi-agente)
-# langgraph>=0.2.0
-# langchain-groq>=0.2.0
+# Data viz para evals
+matplotlib>=3.9.0
+pandas>=2.2.0

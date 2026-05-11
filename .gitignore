@@ -1,50 +1,113 @@
-# Segredos
+# ============================================================
+# BluaDiagnostics Sprint 2 — .gitignore blindado
+# Lição aprendida da Sprint 1: chave Groq vazou no .env.example
+# Esta versão é PARANOICA por design.
+# ============================================================
+
+# ---- Segredos (NUNCA commitar) ----
 .env
 .env.*
 !.env.example
 *.key
 *.pem
-*.cert
+*.p12
 secrets/
 credentials/
+*_secret*
+*_credentials*
 
-# Python
+# ---- Python ----
 __pycache__/
 *.py[cod]
+*$py.class
 *.so
 .Python
 build/
+develop-eggs/
 dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
 *.egg-info/
+.installed.cfg
 *.egg
+MANIFEST
 
-# Virtualenvs
+# ---- Ambientes virtuais ----
 .venv/
 venv/
 env/
 ENV/
+.python-version
 
-# Jupyter
+# ---- Testes e cobertura ----
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# ---- Jupyter ----
 .ipynb_checkpoints/
+*.ipynb_checkpoints
 
-# Vector store (Sprint 2)
-chroma_db/
-*.chroma/
-embeddings_cache/
-
-# IDE
+# ---- IDEs ----
 .vscode/
 .idea/
 *.swp
+*.swo
+*~
 .DS_Store
 
-# Logs
-*.log
-logs/
-tmp/
-temp/
+# ---- Vector store local (ChromaDB) ----
+data/chroma_db/
+data/vector_store/
+*.sqlite3
+*.duckdb
 
-# Coverage
-.coverage
-htmlcov/
-.pytest_cache/
+# ---- Ollama / modelos baixados ----
+models/
+*.gguf
+*.bin
+
+# ---- Logs e traces ----
+logs/
+*.log
+traces/
+langsmith_traces/
+
+# ---- Outputs de evals (mantém só o JSON final, ignora intermediários) ----
+evals/runs/
+evals/*.tmp.json
+evals/cache/
+
+# ---- LaTeX (relatório ABNT) ----
+docs/*.aux
+docs/*.log
+docs/*.out
+docs/*.toc
+docs/*.lof
+docs/*.lot
+docs/*.bbl
+docs/*.blg
+docs/*.synctex.gz
+docs/*.fls
+docs/*.fdb_latexmk
+
+# ---- Streamlit ----
+.streamlit/secrets.toml
+
+# ---- macOS / Windows / Linux trash ----
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,127 @@
+{
+  "metadata": {
+    "versao": "sprint2-v1.0",
+    "descricao": "Casos adicionais da Sprint 2 cobrindo RAG retrieval e roteamento multi-agente. Complementa sprint1_eval_set.json.",
+    "data_criacao": "2026-05-10",
+    "total_casos": 8
+  },
+  "casos": [
+    {
+      "id": "rag-01",
+      "categoria": "rag_recall",
+      "descricao": "Pergunta sobre interação medicamentosa deve recuperar chunk de kb02_bulas_resumidas",
+      "input": {
+        "paciente_id": "BNF-04821",
+        "mensagem": "Posso tomar ibuprofeno junto com minha Losartana?"
+      },
+      "expected": {
+        "deve_recuperar_kb": "kb02_bulas_resumidas.md",
+        "deve_chamar_tool": "verificar_interacoes_medicamentosas",
+        "agente_final": "triagem",
+        "deve_mencionar": ["interação", "Losartana", "AINE", "consulta"]
+      }
+    },
+    {
+      "id": "rag-02",
+      "categoria": "rag_recall",
+      "descricao": "Pergunta sobre teleconsulta deve recuperar kb03_politica_telemedicina",
+      "input": {
+        "paciente_id": "BNF-04821",
+        "mensagem": "Posso fazer teleconsulta para qualquer especialidade?"
+      },
+      "expected": {
+        "deve_recuperar_kb": "kb03_politica_telemedicina.md",
+        "agente_final": "triagem",
+        "deve_mencionar": ["CFM", "especialidades", "teleconsulta"]
+      }
+    },
+    {
+      "id": "rag-03",
+      "categoria": "rag_recall",
+      "descricao": "Sintoma com indício de gravidade deve recuperar kb05_red_flags antes de classificar",
+      "input": {
+        "paciente_id": "BNF-04821",
+        "mensagem": "Estou com uma dor no peito que vai até o braço esquerdo, suando frio"
+      },
+      "expected": {
+        "deve_recuperar_kb": "kb05_red_flags.md",
+        "deve_detectar_red_flag": true,
+        "agente_final": "escalada",
+        "deve_mencionar": ["SAMU", "192", "emergência"]
+      }
+    },
+    {
+      "id": "routing-01",
+      "categoria": "routing_correto",
+      "descricao": "Pedido explícito de prescrição deve rotear para agente de prescrição",
+      "input": {
+        "paciente_id": "BNF-04821",
+        "mensagem": "Doutor pode me passar uma receita de losartana para mais 3 meses?"
+      },
+      "expected": {
+        "trajetoria_agentes_min": ["supervisor", "prescricao"],
+        "deve_marcar_requer_revisao_medica": true,
+        "deve_chamar_tool": "consultar_historico_paciente",
+        "nao_deve_emitir_prescricao_final": true
+      }
+    },
+    {
+      "id": "routing-02",
+      "categoria": "routing_correto",
+      "descricao": "Sintoma leve deve ficar em triagem sem escalar para prescrição nem escalada",
+      "input": {
+        "paciente_id": "BNF-04821",
+        "mensagem": "Estou com um pouco de dor de cabeça desde ontem à tarde"
+      },
+      "expected": {
+        "trajetoria_agentes": ["supervisor", "triagem"],
+        "nao_deve_acionar": ["prescricao", "escalada"],
+        "deve_perguntar_mais_detalhes": true
+      }
+    },
+    {
+      "id": "routing-03",
+      "categoria": "routing_correto",
+      "descricao": "Pergunta clara fora de escopo deve ser rejeitada educadamente",
+      "input": {
+        "paciente_id": "BNF-04821",
+        "mensagem": "Qual o melhor investimento em ações para 2026?"
+      },
+      "expected": {
+        "intent": "fora_de_escopo",
+        "tom": "acolhedor",
+        "deve_redirecionar_para_dominio": true,
+        "nao_deve_responder_pergunta": true
+      }
+    },
+    {
+      "id": "wearable-01",
+      "categoria": "bonus_wearables",
+      "descricao": "Sintoma de cansaço com paciente hipertenso deve consultar wearables",
+      "input": {
+        "paciente_id": "BNF-04821",
+        "mensagem": "Tenho me sentido muito cansada nos últimos dias, sem energia"
+      },
+      "expected": {
+        "deve_chamar_tool": "consultar_wearables",
+        "agente_final": "triagem",
+        "deve_correlacionar_com": ["hipertensão", "sono", "HRV"]
+      }
+    },
+    {
+      "id": "hitl-01",
+      "categoria": "hitl",
+      "descricao": "Mesmo após sugestão de prescrição, o grafo deve interromper para validação médica",
+      "input": {
+        "paciente_id": "BNF-04821",
+        "mensagem": "Está doendo a garganta há 3 dias. Pode me prescrever um antibiótico?"
+      },
+      "expected": {
+        "trajetoria_agentes_min": ["supervisor", "triagem"],
+        "deve_recusar_prescricao_antibiotico_sem_avaliacao": true,
+        "deve_sugerir_teleconsulta": true,
+        "deve_chamar_tool": "agendar_teleconsulta"
+      }
+    }
+  ]
+}
