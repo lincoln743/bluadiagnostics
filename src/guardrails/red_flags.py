@@ -1,36 +1,35 @@
 """
-Detector de Red Flags clínicas — versão MÍNIMA do Dia 3.
+Detector de Red Flags clínicas — v1.1 (Dia 5).
 
-Esta versão é RULE-BASED apenas (regex sobre keywords da kb05_red_flags.md).
-No Dia 5 vamos adicionar um LLM-classifier como fallback para casos ambíguos
-(detecção semântica em vez de match literal).
+CHANGELOG v1.0 → v1.1:
+- Adicionada função detectar_via_llm() para fallback semântico
+- Adicionada função detectar_hibrido() — usar essa nos agentes
+- Adicionados padrões pediátricos cobrindo "filha/filho de N anos"
+  (resolve o miss do caso pediátrico do smoke test do Dia 3)
 
-Por que rule-based primeiro?
-- Determinístico (mesma entrada → mesma saída — bom para testes)
-- Zero latência (ms vs ~500ms do LLM)
-- Zero custo de tokens
-- Falsos NEGATIVOS são o risco real aqui — mitigados pelo LLM fallback no Dia 5
+DESIGN HÍBRIDO:
+    detectar_hibrido():
+        1. detectar() rule-based → se positivo, retorna imediatamente
+        2. Se negativo, detectar_via_llm() → LLM classificador binário
+        3. Resultado merged com metadata da fonte
 
-Princípio de design: PREFERIR FALSO POSITIVO a FALSO NEGATIVO.
-Em saúde, escalar uma dor de cabeça leve por engano é melhor que perder um
-AVC. O custo de "escalar a mais" é uma orientação extra para o paciente;
-o custo de "escalar a menos" pode ser uma vida.
+LATÊNCIA:
+- Caso 1 (regra positiva): <1ms
+- Caso 2 (LLM acionado): ~500-800ms
 """
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Literal
 
 
 # ============================================================
-# Padrões por categoria de red flag (extraídos de kb05_red_flags.md)
+# Padrões rule-based (v1.0 + correções pediátricas v1.1)
 # ============================================================
-# Cada padrão é compilado com IGNORECASE.
-# Padrões usam \b (word boundary) onde fizer sentido, e variações comuns.
 
 RED_FLAG_PATTERNS: dict[str, list[str]] = {
-    # --- Cardiovascular ---
     "cardiovascular": [
         r"\bdor (no |de )?peito\b.*\b(braço|costas|mandíbula|queixo)\b",
         r"\bdor (no |de )?peito\b.*\b(suor|sudorese|frio)\b",
@@ -40,7 +39,6 @@ RED_FLAG_PATTERNS: dict[str, list[str]] = {
         r"\bpalpitação\b.*\b(tontura|síncope|desmai)",
         r"\barritmia\b.*\b(sintom|tontura|dispneia)",
     ],
-    # --- Neurológica ---
     "neurologica": [
         r"\b(avc|derrame|acidente vascular)\b",
         r"\bperdi (a )?(fala|força|movimento)\b",
@@ -53,29 +51,25 @@ RED_FLAG_PATTERNS: dict[str, list[str]] = {
         r"\b(cefaleia|dor de cabeça).*(súbita|pior|nunca senti|trovoada)",
         r"\bpior dor (da|de minha) vida\b",
     ],
-    # --- Respiratória ---
     "respiratoria": [
         r"\bnão (consigo|estou conseguindo) respirar\b",
         r"\bfalta de ar\b.*\b(súbita|grave|intensa|piorando)",
         r"\bdispneia\b.*\b(súbita|grave|intensa)",
-        r"\b(roxo|azul|cianos)",  # cianose
+        r"\b(roxo|azul|cianos)",
         r"\bsufocando\b",
     ],
-    # --- Anafilaxia / alergia grave ---
     "anafilaxia": [
         r"\b(inchaço|incha)\b.*\b(rosto|lábio|língua|garganta)\b",
         r"\banafilaxia\b",
         r"\burticária\b.*\b(falta de ar|tontura|dispneia)",
         r"\bgarganta (fechando|inchando)\b",
     ],
-    # --- Abdominal grave ---
     "abdominal": [
         r"\bdor abdominal\b.*\b(intensa|súbita|insuportável)",
         r"\babdome (em tábua|rígido|duro)\b",
         r"\bsangrando\b.*\b(muito|abundantemente|sem parar)",
         r"\b(hematêmese|vomitando sangue)\b",
     ],
-    # --- Mental / autoextermínio ---
     "mental_grave": [
         r"\b(suicídio|suicidar|me matar|tirar minha vida)\b",
         r"\b(não quero|cansei de) viver\b",
@@ -83,23 +77,26 @@ RED_FLAG_PATTERNS: dict[str, list[str]] = {
         r"\bideação suicida\b",
         r"\bautoextermínio\b",
     ],
-    # --- Gestacional / materno-infantil ---
     "gestacional": [
         r"\bgestante\b.*\b(sangramento|sangrando|cefaleia intensa|visão)",
         r"\bgrávida\b.*\b(sangramento|sangrando|dor forte|convulsão)",
         r"\b(eclâmpsia|pré-eclâmpsia)\b",
         r"\b(bebê|feto) (parou|não está) (mexendo|se movendo)\b",
     ],
-    # --- Pediátrica ---
+    # V1.1: expandido para cobrir "filha/filho de X anos/meses"
     "pediatrica": [
+        # Termos coletivos
         r"\b(bebê|criança|filho|filha)\b.*\b(letárgic|mole|não responde)",
         r"\b(bebê|criança)\b.*\b(febre|temperatura)\b.*\b(petéquia|manchas roxas)",
         r"\bconvuls[aã]o (no |da |em )?(bebê|criança|filho|filha)\b",
+        # FIX V1.1: "filho/filha/bebê de X (anos|meses)" como sujeito
+        r"\b(filho|filha|bebê|menino|menina)\s+de\s+\d+\s+(anos?|meses?)\b.*\b(febre|petéquia|manchas roxas|convuls|letárgic|mole|não responde)",
+        r"\bminha?\s+(filha|filho|bebê)\b.*\b(petéquia|manchas roxas)",
+        r"\bminha?\s+(filha|filho|bebê)\b.*\b(letárgic|não acorda|sem responder)",
     ],
 }
 
 
-# Severidade por categoria — algumas são SEMPRE críticas
 SEVERIDADE_CATEGORIA: dict[str, Literal["alta", "critica"]] = {
     "cardiovascular": "critica",
     "neurologica": "critica",
@@ -114,49 +111,37 @@ SEVERIDADE_CATEGORIA: dict[str, Literal["alta", "critica"]] = {
 
 @dataclass
 class RedFlagResult:
-    """Resultado da detecção. `detectada=False` é o caminho normal."""
     detectada: bool
     categoria: str | None = None
     frase_gatilho: str = ""
     severidade: Literal["alta", "critica"] = "alta"
     fonte_deteccao: Literal["regra", "llm"] = "regra"
-    todas_categorias: list[str] = field(default_factory=list)  # se múltiplas
+    todas_categorias: list[str] = field(default_factory=list)
 
 
-# Pré-compila regex (executa uma vez no import — performance)
+# Pré-compila
 _COMPILED_PATTERNS: dict[str, list[re.Pattern]] = {
     cat: [re.compile(p, re.IGNORECASE | re.UNICODE) for p in patterns]
     for cat, patterns in RED_FLAG_PATTERNS.items()
 }
 
 
+# ============================================================
+# Detector rule-based (v1.0 — preservado)
+# ============================================================
+
 def detectar(texto: str) -> RedFlagResult:
-    """
-    Detecta red flags em uma mensagem do paciente.
-
-    Args:
-        texto: mensagem em texto livre (pt-BR)
-
-    Returns:
-        RedFlagResult com flag, categoria e frase gatilho.
-
-    Estratégia:
-        Itera por categoria; se qualquer padrão der match, marca detectada=True.
-        Se múltiplas categorias matcham, retorna a PRIMEIRA na ordem do dict
-        (cardiovascular > neurologica > ...) mas guarda todas em
-        `todas_categorias` para auditoria.
-    """
+    """Detecta red flag via regex. Função pura, determinística, <1ms."""
     if not texto or not texto.strip():
         return RedFlagResult(detectada=False)
 
-    matches: list[tuple[str, str]] = []  # (categoria, trecho_matched)
-
+    matches: list[tuple[str, str]] = []
     for categoria, patterns in _COMPILED_PATTERNS.items():
         for pattern in patterns:
             m = pattern.search(texto)
             if m:
                 matches.append((categoria, m.group(0)))
-                break  # já achou nessa categoria, vai pra próxima
+                break
 
     if not matches:
         return RedFlagResult(detectada=False)
@@ -173,15 +158,118 @@ def detectar(texto: str) -> RedFlagResult:
 
 
 # ============================================================
-# TODO Dia 5: adicionar LLM-classifier como fallback
+# Detector LLM (v1.1 — novo)
 # ============================================================
-# def detectar_via_llm(texto: str) -> RedFlagResult:
-#     """Classifier semântico para casos que regex não pegou."""
-#     ...
-#
-# def detectar_hibrido(texto: str) -> RedFlagResult:
-#     """Tenta regra primeiro; se negativo, tenta LLM."""
-#     r = detectar(texto)
-#     if r.detectada:
-#         return r
-#     return detectar_via_llm(texto)
+
+LLM_CLASSIFIER_PROMPT = """\
+Você é um classificador binário de sintomas clínicos para um sistema de \
+triagem de saúde. Sua única tarefa: dada a mensagem de um paciente, decidir \
+se ela contém SINAL DE ALERTA CLÍNICO que exija atendimento médico imediato \
+(SAMU 192 ou CVV 188).
+
+CATEGORIAS QUE EXIGEM ESCALADA IMEDIATA:
+- cardiovascular: dor torácica com irradiação, suor frio, infarto suspeito, arritmia sintomática
+- neurologica: AVC (perda de força, fala, consciência), convulsão, cefaleia súbita intensíssima
+- respiratoria: falta de ar súbita grave, cianose, sufocação
+- anafilaxia: inchaço de língua/garganta, urticária com falta de ar
+- abdominal: abdome em tábua, sangramento intenso, hematêmese
+- mental_grave: ideação suicida, autoagressão, intenção de morte
+- gestacional: sangramento gestacional, eclâmpsia, redução de movimentos fetais
+- pediatrica: criança com febre + petéquias, letargia, convulsão em <2a
+
+NÃO são red flags (deixe passar):
+- Sintomas leves a moderados sem irradiação ou gravidade
+- Sintomas crônicos sem piora aguda
+- Dúvidas sobre medicação ou agendamento
+
+Responda APENAS com JSON:
+{"detectada": true|false, "categoria": "<uma das acima>" ou null, "justificativa": "1 frase"}
+
+NÃO adicione texto fora do JSON.
+"""
+
+
+def detectar_via_llm(texto: str) -> RedFlagResult:
+    """
+    Detector semântico via LLM. Usado como fallback do rule-based.
+
+    Returns:
+        RedFlagResult com fonte_deteccao="llm".
+        Em caso de erro de parsing/API, retorna detectada=False (fail-safe).
+    """
+    # Import local para evitar import circular (red_flags é importado em supervisor)
+    from src.providers.llm_provider import get_provider
+
+    if not texto or not texto.strip():
+        return RedFlagResult(detectada=False)
+
+    try:
+        provider = get_provider()
+        response = provider.chat_completion(
+            messages=[
+                {"role": "system", "content": LLM_CLASSIFIER_PROMPT},
+                {"role": "user", "content": texto},
+            ],
+            temperature=0.0,  # determinístico
+            max_tokens=120,
+        )
+
+        text = response.text.strip()
+        # Remove markdown fences se houver
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+
+        data = json.loads(text)
+        detectada = bool(data.get("detectada", False))
+        categoria = data.get("categoria")
+        justificativa = data.get("justificativa", "")
+
+        if not detectada or not categoria:
+            return RedFlagResult(detectada=False)
+
+        # Valida categoria
+        if categoria not in SEVERIDADE_CATEGORIA:
+            return RedFlagResult(detectada=False)
+
+        return RedFlagResult(
+            detectada=True,
+            categoria=categoria,
+            frase_gatilho=justificativa[:120],
+            severidade=SEVERIDADE_CATEGORIA[categoria],
+            fonte_deteccao="llm",
+            todas_categorias=[categoria],
+        )
+
+    except (json.JSONDecodeError, KeyError, ValueError):
+        # Fail-safe: em caso de erro, não detecta (regra já tentou e falhou também)
+        return RedFlagResult(detectada=False)
+    except Exception:
+        # Catch-all defensivo (API down, rate limit esgotado, etc)
+        return RedFlagResult(detectada=False)
+
+
+# ============================================================
+# Detector híbrido (v1.1 — função principal a ser usada nos agentes)
+# ============================================================
+
+def detectar_hibrido(texto: str, usar_llm_fallback: bool = True) -> RedFlagResult:
+    """
+    Detector híbrido. Esta é a função PRINCIPAL a ser usada pelo supervisor.
+
+    Estratégia:
+        1. Tenta detectar() rule-based — se positivo, retorna em <1ms.
+        2. Se rule-based negativo E usar_llm_fallback=True:
+           Tenta detectar_via_llm() — ~500-800ms.
+        3. Resultado final tem fonte_deteccao="regra" ou "llm".
+
+    Args:
+        texto: mensagem do paciente
+        usar_llm_fallback: se False, equivale ao detectar() puro (útil em testes)
+
+    Returns:
+        RedFlagResult com metadados de fonte.
+    """
+    rb = detectar(texto)
+    if rb.detectada or not usar_llm_fallback:
+        return rb
+    return detectar_via_llm(texto)

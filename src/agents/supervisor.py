@@ -1,26 +1,18 @@
 """
-Agente Supervisor — roteador central do sistema multi-agente.
+Agente Supervisor — v1.2 (Dia 5).
 
-Pipeline de decisão (em ordem):
-    1. Detector de red flag (rule-based)  → intent="escalada" se positivo
-    2. Validador de escopo (rule-based)   → intent="fora_de_escopo" se off-topic
-    3. Classificação híbrida de intent:
-       3a. Rule-based (keywords)          → retorna se confiante
-       3b. LLM fallback (Groq Llama 3.1)  → cobre casos ambíguos
+PIPELINE V1.2 (atualizado):
+    1. moderar()              [NOVO] → bloqueia jailbreaks ANTES de tudo
+    2. detectar_hibrido()             → red flag (rule + LLM fallback)
+    3. validar_hibrido()              → escopo (rule + LLM fallback)
+    4. _classificar_rule_based()      → keywords óbvias
+    5. _classificar_via_llm()         → LLM com few-shot
 
-Esse design ATENDE ao princípio "defesa em profundidade":
-- Red flags: NUNCA dependem do LLM. Garantia determinística.
-- Off-topic óbvio: rule-based rejeita rápido sem gastar token.
-- Casos sutis: LLM com few-shot decide.
-
-Updates ao state retornados como dict (LangGraph faz merge automático):
-    {
-        "intent": "...",
-        "agentes_acionados": ["supervisor"],
-        "red_flags_detectadas": [...] (opcional),
-        "motivo_classificacao": "rule|llm|fallback - explicação",
-        "turno_atual": state["turno_atual"] + 1,
-    }
+Mudanças v1.1 → v1.2:
+- Adicionado step 1: moderação anti-jailbreak (curto-circuita para fora_escopo)
+- Trocado detectar() rule-only por detectar_hibrido() (LLM fallback)
+- Trocado validar_escopo() puro por validar_hibrido() (LLM fallback)
+- Campo motivo_classificacao agora distingue "jailbreak" de "off-topic legítimo"
 """
 from __future__ import annotations
 
@@ -29,14 +21,15 @@ import re
 from typing import Any
 
 from src.graph.state import BluaState, Intent, RedFlagInfo
-from src.guardrails.red_flags import detectar as detectar_red_flag
-from src.guardrails.scope import validar_escopo
+from src.guardrails.moderation import moderar
+from src.guardrails.red_flags import detectar_hibrido as detectar_red_flag
+from src.guardrails.scope import validar_hibrido as validar_escopo
 from src.prompts.system_prompts import SUPERVISOR_FEW_SHOTS, montar_supervisor_messages
 from src.providers.llm_provider import get_provider
 
 
 # ============================================================
-# Classificação rule-based — keywords óbvias por intent
+# Rule-based intent (v1.0 — preservado)
 # ============================================================
 
 RULE_PATTERNS: dict[Intent, list[str]] = {
@@ -44,20 +37,17 @@ RULE_PATTERNS: dict[Intent, list[str]] = {
         r"\b(receita|prescriç[ãa]o|prescrever|prescreve)\b",
         r"\b(passa|me passe|pode passar) (uma )?(receita|prescriç[ãa]o)\b",
         r"\brenovar (a )?receita\b",
-        r"\bantibi[oó]tico\b",  # pedido típico
+        r"\bantibi[oó]tico\b",
         r"\bme prescreva\b",
     ],
     "triagem": [
-        # Sintomas comuns — alta confiança
         r"\b(estou com|sinto|sentindo|tenho|tive)\b.*\b(dor|febre|tosse|n[aá]usea|tontura|cansaço|fadiga)\b",
         r"\b(dor|febre|tosse) (de|h[aá]) \d+ dias?\b",
-        # Dúvida sobre uso de medicação (não pedido de prescrição)
         r"\bposso tomar\b",
-        r"\bpode tomar\b.*\bcom\b",  # interação
+        r"\bpode tomar\b.*\bcom\b",
         r"\b(efeito colateral|reaç[ãa]o adversa)\b",
     ],
     "escalada": [
-        # Pedidos explícitos de humano (red flag PRÓPRIA já cobre urgência clínica)
         r"\bquero (falar|conversar) (com|um) (m[eé]dico|humano|atendente|pessoa)\b",
         r"\bcom (um |o |a )?m[eé]dico (agora|urgente)\b",
         r"\bn[aã]o quero falar com (bot|rob[oô]|ia)\b",
@@ -66,10 +56,6 @@ RULE_PATTERNS: dict[Intent, list[str]] = {
 
 
 def _classificar_rule_based(mensagem: str) -> tuple[Intent | None, str]:
-    """
-    Tenta classificar por regex. Retorna (intent, motivo) ou (None, "").
-    Intent None significa: rule-based não conseguiu decidir; vai para LLM.
-    """
     for intent, patterns in RULE_PATTERNS.items():
         for p in patterns:
             m = re.search(p, mensagem, re.IGNORECASE | re.UNICODE)
@@ -79,7 +65,7 @@ def _classificar_rule_based(mensagem: str) -> tuple[Intent | None, str]:
 
 
 # ============================================================
-# Classificação via LLM (fallback)
+# LLM classifier (v1.0 — preservado)
 # ============================================================
 
 VALID_INTENTS = {"triagem", "prescricao", "escalada", "fora_de_escopo"}
@@ -89,22 +75,17 @@ def _classificar_via_llm(
     nova_mensagem: str,
     historico: list[dict[str, Any]],
 ) -> tuple[Intent, str]:
-    """
-    Chama Groq com few-shot. Faz parsing defensivo do JSON.
-    Em caso de erro, fallback para "triagem" (default seguro).
-    """
+    """Chama Groq com few-shot. Parsing defensivo."""
     provider = get_provider()
     messages = montar_supervisor_messages(historico, nova_mensagem)
 
     response = provider.chat_completion(
         messages=messages,
-        temperature=0.1,   # determinístico para classificação
-        max_tokens=120,    # JSON curto
+        temperature=0.1,
+        max_tokens=120,
     )
 
     text = response.text.strip()
-
-    # Parsing defensivo — o LLM pode envolver em ```json ```, vamos limpar
     text_clean = re.sub(r"^```(?:json)?\s*", "", text)
     text_clean = re.sub(r"\s*```$", "", text_clean)
 
@@ -116,24 +97,17 @@ def _classificar_via_llm(
         if intent_raw in VALID_INTENTS:
             return intent_raw, f"llm: {motivo}"
         else:
-            return "triagem", f"llm: intent inválido '{intent_raw}' — fallback para triagem"
+            return "triagem", f"llm: intent inválido '{intent_raw}' — fallback triagem"
     except json.JSONDecodeError:
-        return "triagem", f"llm: JSON inválido na resposta — fallback para triagem (raw: {text[:60]}...)"
+        return "triagem", f"llm: JSON inválido — fallback triagem (raw: {text[:60]}...)"
 
 
 # ============================================================
-# Nó do grafo — supervisor_node
+# Nó do grafo — V1.2 com moderação
 # ============================================================
 
 def supervisor_node(state: BluaState) -> dict[str, Any]:
-    """
-    Nó do LangGraph. Lê a última mensagem do usuário e classifica intent.
-
-    Não escreve resposta para o usuário — só roteia.
-
-    Retorna dict com chaves a atualizar no estado (LangGraph faz merge).
-    """
-    # Pega última mensagem do usuário no histórico
+    """Nó do LangGraph. Pipeline: moderação → red flag → escopo → intent."""
     user_msgs = [m for m in state["mensagens"] if m.get("role") == "user"]
     if not user_msgs:
         return {
@@ -145,7 +119,20 @@ def supervisor_node(state: BluaState) -> dict[str, Any]:
 
     ultima_msg = user_msgs[-1].get("content", "")
 
-    # ========== 1. RED FLAG (prioridade máxima) ==========
+    # ========== 1. MODERAÇÃO (NOVO V1.2 — prioridade máxima) ==========
+    mod = moderar(ultima_msg)
+    if mod.bloqueado:
+        return {
+            "intent": "fora_de_escopo",  # reusa agente fora_escopo
+            "agentes_acionados": ["supervisor"],
+            "motivo_classificacao": (
+                f"jailbreak/moderation bloqueado: {mod.categoria} "
+                f"(severidade {mod.severidade}, gatilho: '{mod.trecho_gatilho}')"
+            ),
+            "turno_atual": state.get("turno_atual", 0) + 1,
+        }
+
+    # ========== 2. RED FLAG (V1.2: agora híbrido) ==========
     rf = detectar_red_flag(ultima_msg)
     if rf.detectada:
         red_flag_info: RedFlagInfo = {
@@ -159,21 +146,24 @@ def supervisor_node(state: BluaState) -> dict[str, Any]:
             "agentes_acionados": ["supervisor"],
             "red_flags_detectadas": [red_flag_info],
             "requer_escalada_humana": True,
-            "motivo_classificacao": f"red flag detectada: {rf.categoria} (gatilho: '{rf.frase_gatilho}')",
+            "motivo_classificacao": (
+                f"red flag detectada via {rf.fonte_deteccao}: {rf.categoria} "
+                f"(gatilho: '{rf.frase_gatilho}')"
+            ),
             "turno_atual": state.get("turno_atual", 0) + 1,
         }
 
-    # ========== 2. ESCOPO ==========
+    # ========== 3. ESCOPO (V1.2: agora híbrido) ==========
     scope = validar_escopo(ultima_msg)
     if not scope.no_escopo:
         return {
             "intent": "fora_de_escopo",
             "agentes_acionados": ["supervisor"],
-            "motivo_classificacao": f"fora de escopo: {scope.motivo}",
+            "motivo_classificacao": f"fora de escopo via {scope.fonte_deteccao}: {scope.motivo}",
             "turno_atual": state.get("turno_atual", 0) + 1,
         }
 
-    # ========== 3a. CLASSIFICAÇÃO RULE-BASED ==========
+    # ========== 4. CLASSIFICAÇÃO RULE-BASED ==========
     intent_rb, motivo_rb = _classificar_rule_based(ultima_msg)
     if intent_rb is not None:
         return {
@@ -183,7 +173,7 @@ def supervisor_node(state: BluaState) -> dict[str, Any]:
             "turno_atual": state.get("turno_atual", 0) + 1,
         }
 
-    # ========== 3b. CLASSIFICAÇÃO LLM (fallback para ambíguos) ==========
+    # ========== 5. CLASSIFICAÇÃO LLM (fallback) ==========
     intent_llm, motivo_llm = _classificar_via_llm(ultima_msg, state["mensagens"])
     return {
         "intent": intent_llm,
@@ -194,19 +184,11 @@ def supervisor_node(state: BluaState) -> dict[str, Any]:
 
 
 # ============================================================
-# Versão "standalone" para uso em smoke test / debugging
+# Versão standalone para smoke test
 # ============================================================
 
 def classificar(mensagem: str, historico: list[dict] | None = None) -> dict[str, Any]:
-    """
-    Versão simplificada para testar isolado do grafo.
-
-    Uso:
-        from src.agents.supervisor import classificar
-        r = classificar("Estou com dor no peito")
-        print(r["intent"])           # "escalada"
-        print(r["motivo"])           # "red flag detectada: cardiovascular..."
-    """
+    """Versão para testar isolado do grafo."""
     from src.graph.state import estado_inicial
 
     state = estado_inicial()
