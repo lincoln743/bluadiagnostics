@@ -1,9 +1,9 @@
 """
-Moderação de conteúdo — v1.1 (Dia 5 fix).
+Moderação de conteúdo — v1.2 (Dia 7 fix).
 
-CHANGELOG v1.0 → v1.1:
-- FIX prompt_injection: padrões mais flexíveis aceitando palavras intermediárias
-  entre "ignore" e "instruções" (ex: "ignore todas AS SUAS instruções")
+CHANGELOG v1.1 → v1.2:
+- pedir_system_prompt: aceita "seu|o|suas|sua|tuas|as" (era só "seu|o")
+  Pega variações como "Revele suas instruções iniciais"
 """
 from __future__ import annotations
 
@@ -12,14 +12,9 @@ from dataclasses import dataclass
 from typing import Literal
 
 
-# ============================================================
-# Padrões rule-based por categoria
-# ============================================================
-
 JAILBREAK_PATTERNS: dict[str, list[str]] = {
-    # --- Prompt injection (V1.1 — mais flexível) ---
+    # --- Prompt injection (v1.1, sem mudanças) ---
     "prompt_injection": [
-        # Aceita até 3 palavras entre "ignore" e "instruções"
         r"\bignor[ae]\s+(?:\w+\s+){0,3}(?:instru[cç][oõ]es|orienta[cç][oõ]es|regras|prompts?)",
         r"\besque[cç]a\s+(?:\w+\s+){0,3}(?:instru[cç][oõ]es|orienta[cç][oõ]es|persona|papel)",
         r"\bdisregard\s+(?:\w+\s+){0,3}(?:instructions|rules)",
@@ -45,14 +40,15 @@ JAILBREAK_PATTERNS: dict[str, list[str]] = {
         r"\bsem\s+filtros?",
         r"\bsem\s+censura",
     ],
-    # --- Pedir system prompt ---
+    # --- Pedir system prompt (V1.2 — aceita posseivos amplos) ---
     "pedir_system_prompt": [
-        r"\b(mostre|revele|mostra|cite|repita|imprima)\s+(seu|o)\s+(system\s+)?(prompt|instru[cç][oõ]es?|persona|configura[cç][aã]o)",
-        r"\bqual\s+[eé]\s+(seu|o)\s+(system\s+)?(prompt|persona|papel\s+definido)",
+        # FIX V1.2: "seu|sua|suas|seus|o|a|as|os|tuas" em vez de só "seu|o"
+        r"\b(mostre|revele|mostra|cite|repita|imprima)\s+(seu|sua|seus|suas|tua|tuas|o|a|os|as)\s+(system\s+)?(prompt|instru[cç][oõ]es?|persona|configura[cç][aã]o)",
+        r"\bqual\s+[eé]\s+(seu|o|a|sua)\s+(system\s+)?(prompt|persona|papel\s+definido)",
         r"\bwhat\s+(is|are)\s+your\s+(system\s+)?(prompt|instructions)",
         r"\brepeat\s+your\s+(system\s+)?(prompt|instructions)",
     ],
-    # --- Bypass de HITL (prescrição sem revisão) ---
+    # --- Bypass de HITL ---
     "prescricao_sem_revisao": [
         r"\bsem\s+(precisar|necessidade)\s+(de\s+)?(consulta|m[eé]dico|revis[aã]o)",
         r"\bn[aã]o\s+precisa\s+(de\s+)?(consulta|m[eé]dico|revis[aã]o\s+m[eé]dica)",

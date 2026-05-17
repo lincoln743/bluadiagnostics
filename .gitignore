@@ -111,3 +111,8 @@ docs/*.fdb_latexmk
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Cobertura pytest (Dia 7)
+.coverage
+.coverage_html/
+.pytest_cache/
