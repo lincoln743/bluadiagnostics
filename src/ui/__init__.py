@@ -1,0 +1,1 @@
+"""UI Streamlit do BluaDiagnostics."""

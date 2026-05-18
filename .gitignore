@@ -116,3 +116,6 @@ desktop.ini
 .coverage
 .coverage_html/
 .pytest_cache/
+
+# Streamlit traces (Dia 8)
+logs/traces/*.jsonl
