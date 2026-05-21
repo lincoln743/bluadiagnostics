@@ -1,0 +1,246 @@
+{
+  "sprint": 2,
+  "timestamp": "2026-05-19T00:56:00.596095+00:00",
+  "total_casos": 8,
+  "aprovados": 6,
+  "accuracy_global": 0.75,
+  "por_categoria": {
+    "rag_recall": {
+      "total": 3,
+      "aprovados": 2,
+      "accuracy": 0.6666666666666666,
+      "score_medio": 0.8333333333333334
+    },
+    "routing_correto": {
+      "total": 3,
+      "aprovados": 2,
+      "accuracy": 0.6666666666666666,
+      "score_medio": 0.8333333333333334
+    },
+    "bonus_wearables": {
+      "total": 1,
+      "aprovados": 1,
+      "accuracy": 1.0,
+      "score_medio": 1.0
+    },
+    "hitl": {
+      "total": 1,
+      "aprovados": 1,
+      "accuracy": 1.0,
+      "score_medio": 1.0
+    }
+  },
+  "latencia_p50_s": 35.463099241256714,
+  "latencia_p95_s": 148.5630660057068,
+  "duracao_total_s": 495.3346412181854,
+  "casos": [
+    {
+      "id": "rag-01",
+      "categoria": "rag_recall",
+      "descricao": "Pergunta sobre interação medicamentosa deve recuperar chunk de kb02_bulas_resumidas",
+      "duracao_s": 22.22904372215271,
+      "score": 1.0,
+      "passou": true,
+      "detalhes": {
+        "agente_final": {
+          "esperado": "triagem",
+          "obtido": "triagem",
+          "ok": true
+        },
+        "deve_recuperar_kb": {
+          "esperado": "kb02_bulas_resumidas.md",
+          "obtido": [
+            "kb02_bulas_resumidas.md"
+          ],
+          "ok": true
+        },
+        "deve_chamar_tool_qualquer": {
+          "opcoes": [
+            "verificar_interacoes_medicamentosas",
+            "buscar_conhecimento_clinico"
+          ],
+          "obtido": [
+            "buscar_conhecimento_clinico"
+          ],
+          "ok": true
+        },
+        "deve_mencionar:interação": {
+          "ok": true
+        },
+        "deve_mencionar:Losartana": {
+          "ok": true
+        },
+        "deve_mencionar:consulta": {
+          "ok": true
+        },
+        "deve_mencionar_qualquer": {
+          "opcoes": [
+            "AINE",
+            "anti-inflamatório",
+            "ibuprofeno"
+          ],
+          "ok": true
+        }
+      },
+      "erro": null
+    },
+    {
+      "id": "rag-02",
+      "categoria": "rag_recall",
+      "descricao": "Pergunta sobre teleconsulta deve recuperar kb03_politica_telemedicina",
+      "duracao_s": 91.89504790306091,
+      "score": 0.5,
+      "passou": false,
+      "detalhes": {
+        "agente_final": {
+          "esperado": "triagem",
+          "obtido": "triagem",
+          "ok": true
+        },
+        "deve_recuperar_kb": {
+          "esperado": "kb03_politica_telemedicina.md",
+          "obtido": [],
+          "ok": false
+        },
+        "deve_mencionar:especialidades": {
+          "ok": false
+        },
+        "deve_mencionar:teleconsulta": {
+          "ok": true
+        }
+      },
+      "erro": null
+    },
+    {
+      "id": "rag-03",
+      "categoria": "rag_recall",
+      "descricao": "Sintoma com indício de gravidade deve recuperar kb05_red_flags antes de classificar",
+      "duracao_s": 0.013136863708496094,
+      "score": 1.0,
+      "passou": true,
+      "detalhes": {
+        "agente_final": {
+          "esperado": "escalada",
+          "obtido": "escalada",
+          "ok": true
+        },
+        "deve_detectar_red_flag": {
+          "obtido": 1,
+          "ok": true
+        },
+        "deve_mencionar:SAMU": {
+          "ok": true
+        },
+        "deve_mencionar:192": {
+          "ok": true
+        }
+      },
+      "erro": null
+    },
+    {
+      "id": "routing-01",
+      "categoria": "routing_correto",
+      "descricao": "Pedido explícito de prescrição deve rotear para agente de prescrição",
+      "duracao_s": 148.5630660057068,
+      "score": 0.5,
+      "passou": false,
+      "detalhes": {
+        "agente_final": {
+          "esperado": "prescricao",
+          "obtido": "prescricao",
+          "ok": true
+        },
+        "deve_mencionar:losartana": {
+          "ok": false
+        }
+      },
+      "erro": null
+    },
+    {
+      "id": "routing-02",
+      "categoria": "routing_correto",
+      "descricao": "Sintoma leve deve ficar em triagem sem escalar para prescrição",
+      "duracao_s": 29.579408645629883,
+      "score": 1.0,
+      "passou": true,
+      "detalhes": {
+        "agente_final": {
+          "esperado": "triagem",
+          "obtido": "triagem",
+          "ok": true
+        }
+      },
+      "erro": null
+    },
+    {
+      "id": "routing-03",
+      "categoria": "routing_correto",
+      "descricao": "Pergunta clara fora de escopo deve ser rejeitada educadamente",
+      "duracao_s": 1.4302263259887695,
+      "score": 1.0,
+      "passou": true,
+      "detalhes": {
+        "agente_final": {
+          "esperado": "fora_de_escopo",
+          "obtido": "fora_de_escopo",
+          "ok": true
+        },
+        "deve_mencionar_qualquer": {
+          "opcoes": [
+            "saúde",
+            "Care Plus",
+            "ajudar",
+            "sintomas"
+          ],
+          "ok": true
+        }
+      },
+      "erro": null
+    },
+    {
+      "id": "wearable-01",
+      "categoria": "bonus_wearables",
+      "descricao": "Sintoma de cansaço com paciente hipertenso deve ficar em triagem (idealmente consultando wearables)",
+      "duracao_s": 35.463099241256714,
+      "score": 1.0,
+      "passou": true,
+      "detalhes": {
+        "agente_final": {
+          "esperado": "triagem",
+          "obtido": "triagem",
+          "ok": true
+        }
+      },
+      "erro": null
+    },
+    {
+      "id": "hitl-01",
+      "categoria": "hitl",
+      "descricao": "Após sugestão de prescrição, o sistema deve marcar necessidade de revisão médica",
+      "duracao_s": 145.14716124534607,
+      "score": 1.0,
+      "passou": true,
+      "detalhes": {
+        "agente_final": {
+          "esperado": "prescricao",
+          "obtido": "prescricao",
+          "ok": true
+        },
+        "requer_hitl": {
+          "obtido": true,
+          "ok": true
+        },
+        "deve_mencionar_qualquer": {
+          "opcoes": [
+            "teleconsulta",
+            "médico",
+            "validação",
+            "revisão"
+          ],
+          "ok": true
+        }
+      },
+      "erro": null
+    }
+  ]
+}

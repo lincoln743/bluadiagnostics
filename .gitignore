@@ -119,3 +119,9 @@ desktop.ini
 
 # Streamlit traces (Dia 8)
 logs/traces/*.jsonl
+
+# Screenshots (uso pessoal — não comitar)
+screenshots/
+
+# Eval results gerados (Dia 10)
+evals/results/*.json

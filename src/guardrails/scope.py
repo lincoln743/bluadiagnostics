@@ -1,8 +1,13 @@
 """
-Validador de Escopo — v1.2 (Dia 5 fix).
+Validador de Escopo — v1.3 (Dia 10 fix).
 
-CHANGELOG v1.1 → v1.2:
-- FIX receita culinária: aceita "como faço/preparo" além de "como fazer/preparar"
+CHANGELOG v1.2 → v1.3:
+- Adicionados termos clínicos comuns que estavam faltando:
+  * cansaço, fadiga, exaustão, esgotamento (descoberto via eval wearable-01)
+  * indisposição, mal-estar, sem energia
+  * insônia, dormindo mal, sono ruim
+  * ansiedade, estresse, preocupação (sintomas mentais leves não-críticos)
+- Sem alterações no LLM fallback nem em padrões off-topic.
 """
 from __future__ import annotations
 
@@ -11,29 +16,31 @@ import re
 from dataclasses import dataclass
 
 
-# Padrões OFF-TOPIC claros
+# Padrões OFF-TOPIC claros (sem mudança)
 OFF_TOPIC_PATTERNS = [
-    # Finanças
     r"\b(investir|investimento|ação|ações|bolsa|bitcoin|cripto|criptomoeda)\b",
     r"\b(rentabilidade|cdb|tesouro direto|imposto de renda)\b",
-    # Tecnologia
     r"\b(programar|código fonte|python|javascript|html|github)\b",
     r"\b(api rest|sql|database|servidor)\b",
-    # Esportes / entretenimento
     r"\b(time de futebol|copa do mundo|brasileirão|libertadores)\b",
     r"\b(filme|série|netflix|spotify|videogame)\b",
-    # Política
     r"\b(eleição|presidente do brasil|governador|deputado|senador|partido político)\b",
-    # Receitas culinárias (V1.2 — aceita "faço/preparo" também + "uma lasanha")
     r"\bcomo\s+(faço|fazer|preparo|preparar|cozinhar)\s+(uma?\s+)?(bolo|massa|pão|lasanha|risoto|feijoada|sopa|comida)\b",
     r"\breceita de (bolo|massa|pão|lasanha|risoto|comida)\b",
-    # Clima
     r"\b(previsão do tempo|vai chover|temperatura amanhã)\b",
 ]
 
-# Padrões ON-TOPIC
+# Padrões ON-TOPIC — V1.3 expandido com sintomas comuns que faltavam
 ON_TOPIC_HINTS = [
-    r"\b(dor|sintoma|sintomas|febre|tosse|cansaço|n[aá]usea|vômito|tontura|fadiga)\b",
+    r"\b(dor|sintoma|sintomas|febre|tosse|n[aá]usea|vômito|tontura)\b",
+    # V1.3: cansaço/fadiga/etc — sintomas constitucionais comuns
+    r"\b(cansaço|cansad[oa]|fadiga|exaust[oa]|esgotad[oa]|sem energia)\b",
+    r"\b(indisposi[çc][aã]o|mal-?estar|prostra[çc][aã]o)\b",
+    r"\b(insônia|insone|dormindo mal|sem dormir|sono ruim|n[aã]o consigo dormir)\b",
+    # V1.3: sintomas mentais leves
+    r"\b(ansiedade|ansioso|estresse|estressad[oa]|preocupa[çc][aã]o|nervos[oa])\b",
+    r"\b(triste|tristeza|desânimo|sem ânimo)\b",
+    # Medicação / consulta / saúde plano (sem mudança)
     r"\b(remédio|medicamento|medicação|comprimido|cápsula|posologia|bula)\b",
     r"\b(consulta|teleconsulta|m[eé]dico|doutor|doutora|enfermeira|enfermeiro)\b",
     r"\b(care plus|blua|plano de saúde|beneficiário|carteirinha)\b",
@@ -46,6 +53,9 @@ ON_TOPIC_HINTS = [
     r"\b(coração|pulmão|estômago|rim|fígado|articulação)\b",
     r"\b(gestante|grávida|gestação)\b",
     r"\b(criança|bebê|infantil)\s+(com|está|tem)",
+    # V1.3: wearables e métricas de saúde
+    r"\b(passos|caloria|batimentos|pressão arterial|spo2|saturação)\b",
+    r"\b(apple watch|smartwatch|wearable|fitbit)\b",
 ]
 
 
@@ -93,10 +103,7 @@ def validar_escopo(mensagem: str) -> ScopeResult:
     )
 
 
-# ============================================================
-# LLM-classifier (v1.1 — sem mudanças)
-# ============================================================
-
+# LLM-classifier (sem mudanças)
 LLM_SCOPE_PROMPT = """\
 Você é um classificador binário para um chatbot de saúde da operadora Care Plus.
 
@@ -115,16 +122,10 @@ NÃO adicione texto fora do JSON.
 
 
 def validar_via_llm(mensagem: str) -> ScopeResult:
-    """Validação semântica via LLM para casos ambíguos."""
     from src.providers.llm_provider import get_provider
 
     if not mensagem or not mensagem.strip():
-        return ScopeResult(
-            no_escopo=True,
-            motivo="vazio — aceitando por default",
-            confianca="alta",
-            fonte_deteccao="llm",
-        )
+        return ScopeResult(no_escopo=True, motivo="vazio", confianca="alta", fonte_deteccao="llm")
 
     try:
         provider = get_provider()
@@ -136,12 +137,10 @@ def validar_via_llm(mensagem: str) -> ScopeResult:
             temperature=0.0,
             max_tokens=80,
         )
-
         text = response.text.strip()
         text = re.sub(r"^```(?:json)?\s*", "", text)
         text = re.sub(r"\s*```$", "", text)
         data = json.loads(text)
-
         return ScopeResult(
             no_escopo=bool(data.get("no_escopo", True)),
             motivo=str(data.get("motivo", "decisão do LLM"))[:120],
@@ -149,23 +148,12 @@ def validar_via_llm(mensagem: str) -> ScopeResult:
             fonte_deteccao="llm",
         )
     except (json.JSONDecodeError, KeyError, ValueError):
-        return ScopeResult(
-            no_escopo=True,
-            motivo="LLM JSON inválido — aceitando por default",
-            confianca="baixa",
-            fonte_deteccao="llm",
-        )
+        return ScopeResult(no_escopo=True, motivo="LLM JSON inválido", confianca="baixa", fonte_deteccao="llm")
     except Exception:
-        return ScopeResult(
-            no_escopo=True,
-            motivo="LLM erro de chamada — aceitando por default",
-            confianca="baixa",
-            fonte_deteccao="llm",
-        )
+        return ScopeResult(no_escopo=True, motivo="LLM erro", confianca="baixa", fonte_deteccao="llm")
 
 
 def validar_hibrido(mensagem: str, usar_llm_fallback: bool = True) -> ScopeResult:
-    """Validador híbrido — função PRINCIPAL para uso pelo supervisor."""
     rb = validar_escopo(mensagem)
     if rb.confianca == "alta" or not usar_llm_fallback:
         return rb
