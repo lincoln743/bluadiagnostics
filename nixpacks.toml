@@ -1,0 +1,16 @@
+# Configuracao de build do Railway (Nixpacks) para a Blua.
+# Instala SO as deps de producao (requirements-prod), depois o pacote src/app
+# em modo editavel SEM reprocessar deps (--no-deps), evitando streamlit/matplotlib.
+[phases.setup]
+nixPkgs = ["python312", "gcc"]
+
+[phases.install]
+cmds = [
+  "python -m venv --copies /opt/venv",
+  ". /opt/venv/bin/activate && pip install --upgrade pip",
+  ". /opt/venv/bin/activate && pip install -r requirements-prod.txt",
+  ". /opt/venv/bin/activate && pip install -e . --no-deps"
+]
+
+[start]
+cmd = ". /opt/venv/bin/activate && uvicorn app.api.main:app --host 0.0.0.0 --port $PORT"
