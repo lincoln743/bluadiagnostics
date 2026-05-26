@@ -2,11 +2,13 @@
 # So o necessario para app/api/main.py rodar. Sem streamlit/matplotlib/pandas/evals.
 # Core LLM
 groq>=0.11.0
+openai>=1.50.0  # importado em llm_provider.py (cliente compativel Ollama)
 # LangChain / LangGraph (grafo de triagem + embeddings community)
 langchain>=0.3.0
 langchain-core>=0.3.0
 langchain-community>=0.3.0
 langgraph>=0.2.40
+langchain-text-splitters>=0.3.0
 # RAG / embeddings
 chromadb>=0.5.0
 sentence-transformers>=3.0.0
