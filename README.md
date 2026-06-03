@@ -1,171 +1,186 @@
 # 🩺 BluaDiagnostics — Sprint 2
 
-> Assistente de IA conversacional para Check-up Digital e Prescrição Remota Inteligente — pacientes Care Plus / Bupa.
+> Assistente de IA multi-agente para Check-up Digital e Prescrição Remota — Care Plus / Bupa.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![LangGraph](https://img.shields.io/badge/orchestration-LangGraph-orange)](https://langchain-ai.github.io/langgraph/)
-[![Status: Em desenvolvimento](https://img.shields.io/badge/status-em%20desenvolvimento-yellow)]()
-[![Sprint 1](https://img.shields.io/badge/Sprint%201-concluída-success)](https://github.com/lincoln743/bluadiagnostics)
+[![Sprint 2](https://img.shields.io/badge/Sprint%202-conclu%C3%ADda-success)]()
 
-> ⚠️ **Aviso**: protótipo acadêmico (FIAP – Prompt Engineering and AI). Não substitui consulta médica. Toda recomendação clínica é HITL (Human-in-the-Loop) — validada por médico antes de qualquer prescrição.
+> ⚠️ Protótipo acadêmico (FIAP — Prompt Engineering and AI). Não substitui consulta médica. Toda prescrição passa por validação humana obrigatória (HITL).
 
 ---
 
-## 📑 Índice
+## Sumário
 
-1. [Contexto](#contexto)
+1. [O que é](#o-que-é)
 2. [Arquitetura](#arquitetura)
 3. [Como executar](#como-executar)
 4. [Estrutura do repositório](#estrutura-do-repositório)
 5. [Bônus implementados](#bônus-implementados)
-6. [Iterações de prompt](#iterações-de-prompt)
-7. [Resultados dos evals](#resultados-dos-evals)
+6. [Resultados dos evals](#resultados-dos-evals)
+7. [Iterações de prompt](#iterações-de-prompt)
 8. [Trade-offs e limitações](#trade-offs-e-limitações)
 9. [Equipe](#equipe)
 
 ---
 
-## Contexto
+## O que é
 
-**Cliente fictício**: Care Plus — operadora de saúde premium do grupo Bupa, 600k+ beneficiários, 30+ anos no Brasil.
-**Produto**: BluaDiagnostics — transforma o app Blua de reativo (agendamento) em proativo (cuidado contínuo).
-**Persona**: beneficiário em autoavaliação clínica preliminar, tom acolhedor, conservador, sem jargão.
+Assistente de saúde para a operadora fictícia Care Plus, com duas capacidades:
+
+- **Check-up Digital** — triagem clínica conversacional com sugestão de próximo passo (autocuidado, teleconsulta, urgência).
+- **Prescrição Remota** — sugestão de prescrição estruturada para validação por médico humano.
 
 ### Princípios inegociáveis
 
-| Princípio | Implementação |
+| Princípio | Como é garantido |
 |---|---|
-| **HITL obrigatório** | Agente de prescrição interrompe o grafo antes de finalizar (`interrupt_before`) |
-| **Pseudonimização** | IDs no formato `BNF-XXXXX` — nenhum dado pessoal direto |
-| **LGPD-by-design** | Opção Ollama local para zero saída de dados do device |
-| **Red flag = escalada** | Detector dispara antes do supervisor, curto-circuita para SAMU 192 / CVV 188 |
-| **Refusal robusto** | Guardrail de moderação + casos no eval set |
+| **HITL obrigatório** | Agente de prescrição sempre marca `requer_escalada_humana=True` e emite bloco JSON `<sugestao>` para revisão médica |
+| **Pseudonimização** | IDs `BNF-XXXXX` — nenhum dado pessoal direto |
+| **LGPD-by-design** | Opção de rodar com Ollama local (zero saída de dados do dispositivo) |
+| **Red flag = escalada imediata** | Detecção rule-based curto-circuita o supervisor para SAMU 192 / CVV 188 |
+| **Defesa em profundidade** | Guardrails em 3 camadas: moderação anti-jailbreak → red flags → escopo |
 
 ---
 
 ## Arquitetura
 
-Sistema multi-agente orquestrado por LangGraph com 4 agentes especializados:
+Sistema multi-agente em LangGraph com 5 agentes especializados.
 
 ```
-        ┌─────────────────────────────┐
-        │   Interface (Streamlit)     │
-        └──────────────┬──────────────┘
-                       │
-              ┌────────▼────────┐
-              │   Supervisor    │  ← classifica intent
-              │   (LangGraph)   │  ← detecta red flag (curto-circuito)
-              └────┬────┬───┬───┘
-                   │    │   │
-        ┌──────────▼┐ ┌─▼─┐ ▼──────────┐
-        │ Triagem   │ │ Pres-          │  Escalada
-        │ Agent     │ │ crição         │  Humana
-        └─────┬─────┘ └──┬─────────────┘  └────┬───┘
-              │          │                     │
-              └────┬─────┘                     │
-                   ▼                           │
-        ┌────────────────────────┐             │
-        │   Tools compartilhadas │             │
-        │  • consultar_historico │             │
-        │  • verificar_interacoes│             │
-        │  • agendar_teleconsulta│             │
-        │  • buscar_conhecimento │ ← RAG       │
-        │  • consultar_wearables │ ← BÔNUS     │
-        └───────────┬────────────┘             │
-                    ▼                          ▼
-        ┌────────────────────────┐    ┌─────────────────┐
-        │   RAG (ChromaDB)       │    │   Logs JSONL    │
-        │   5 docs da KB         │    │   + LangSmith   │
-        └────────────────────────┘    └─────────────────┘
+                          START
+                            │
+                            ▼
+              ┌──────────────────────────┐
+              │       SUPERVISOR          │
+              │  1. Moderação (jailbreak) │
+              │  2. Red flag (rule + LLM) │
+              │  3. Escopo (rule + LLM)   │
+              │  4. Regras de intent      │
+              │  5. LLM classifier        │
+              └──────────────────────────┘
+                            │
+              (conditional edge: route)
+                            │
+        ┌──────────┬────────┴────────┬──────────────┐
+        ▼          ▼                 ▼              ▼
+   ┌─────────┐ ┌──────────┐  ┌─────────────┐ ┌──────────────┐
+   │ TRIAGEM │ │PRESCRIÇÃO│  │   ESCALADA  │ │ FORA-ESCOPO  │
+   │tool loop│ │tool loop │  │ template    │ │ template     │
+   │  + RAG  │ │+ HITL    │  │determinístico│ │determinístico│
+   └─────────┘ └──────────┘  └─────────────┘ └──────────────┘
 ```
 
-Diagrama detalhado renderizado em [`docs/arquitetura_sprint2.svg`](docs/arquitetura_sprint2.svg) (gerado no Dia 4).
+Diagrama detalhado e narrativa em [`docs/relatorio_final.pdf`](docs/relatorio_final.pdf).
 
 ### Stack
 
 | Camada | Tecnologia | Justificativa |
 |---|---|---|
-| Orquestração | **LangGraph** 0.2+ | Exigência do briefing; suporta interrupt + checkpointer |
-| LLM principal | **Groq Llama 3.1 8B / 3.3 70B** | Free tier 500k tokens/dia; latência LPU ~200ms |
-| LLM local (BÔNUS) | **Ollama Llama 3.2 3B** | Justificativa LGPD: dados de saúde nunca saem do device |
-| Embeddings | **sentence-transformers** (multilingual MiniLM-L12) | Multilíngue PT-BR, 118MB, sem custo |
-| Vector store | **ChromaDB** | Open source, persistência local, integração nativa LangChain |
-| Interface | **Streamlit** | Demo visual, painel lateral mostrando trajetória + RAG |
-| Observabilidade (BÔNUS) | **LangSmith** + logs JSONL | Traces visuais + auditoria estruturada |
-| Testes (BÔNUS) | **pytest** + cobertura | Tools e guardrails |
+| Orquestração | LangGraph + MemorySaver | Grafo auditável, suporte multi-turno |
+| LLM nuvem | Groq Llama 3.1 8B Instant | Latência baixa, tier gratuito generoso |
+| LLM local | Ollama + Llama 3.2 3B | Conformidade LGPD (on-premise) |
+| RAG | ChromaDB + sentence-transformers | Vetorização local, embeddings multilíngues PT-BR |
+| Testes | pytest | 92 testes determinísticos em 4s |
+| Observabilidade | LangSmith + tracer JSONL próprio | SaaS + local em camadas |
+| Interface | Streamlit | Demo com painel de observabilidade |
 
 ---
 
 ## Como executar
 
-### 1. Pré-requisitos
+### Pré-requisitos
 
 - Python 3.11+
-- Conta Groq (chave em https://console.groq.com/keys)
-- Opcional: Ollama instalado (https://ollama.com)
+- Conta Groq com API key ([console.groq.com/keys](https://console.groq.com/keys))
+- Opcional: Ollama instalado ([ollama.com](https://ollama.com)) para modo LGPD
 
-### 2. Instalação
+### Instalação
 
 ```bash
-# Clonar e entrar
 git clone https://github.com/lincoln743/bluadiagnostics.git
 cd bluadiagnostics
 git checkout sprint2
 
-# Ambiente virtual
 python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# .venv\Scripts\activate   # Windows
+source .venv/bin/activate   # Linux/Mac
+# .venv\Scripts\activate    # Windows
 
-# Dependências
-pip install -e ".[dev]"
+pip install -r requirements.txt
 
-# Configuração
 cp .env.example .env
-# Editar .env e colar sua chave Groq real
+# Edite .env e cole sua GROQ_API_KEY real
 ```
 
-### 3. Popular o vector store (RAG)
+### 1. Popular o vector store (RAG)
 
 ```bash
-blua-ingest
-# ou: python -m src.rag.ingest
+python -m src.rag.ingest
 ```
 
-Isso lê `data/knowledge_base/*.md` e persiste em `data/chroma_db/`.
+Lê `data/knowledge_base/*.md` e persiste em `data/chroma_db/` (82 chunks, 5 KBs).
 
-### 4. Rodar a interface
+> 💡 **Primeira execução demora ~30-60s** — o módulo baixa o modelo de embeddings `paraphrase-multilingual-MiniLM-L12-v2` (~118 MB) na primeira vez. Execuções seguintes são instantâneas (modelo cacheado em `~/.cache/huggingface/`).
+
+### 2. Rodar a interface Streamlit
 
 ```bash
-streamlit run app/streamlit_app.py
+bash scripts/launch_ui.sh
 ```
 
-Abre em `http://localhost:8501`.
-
-### 5. (Opcional) Rodar com Ollama local
+Ou diretamente:
 
 ```bash
-# Em outro terminal
+streamlit run src/ui/app.py
+```
+
+Abre em `http://localhost:8501`. Para parar: `Ctrl+C`.
+
+### 3. Rodar os testes
+
+```bash
+pytest tests/                  # 92 testes
+pytest --cov=src tests/        # com cobertura
+```
+
+### 4. Rodar a suite de evals
+
+```bash
+bash scripts/run_evals.sh              # ambos (Sprint 1 + Sprint 2 + comparativo)
+bash scripts/run_evals.sh --sprint2    # só Sprint 2 (mais rápido, ~3 min)
+bash scripts/run_evals.sh --sprint1    # só Sprint 1 (LLM-as-judge, ~5-8 min)
+```
+
+Resultados oficiais preservados em `evals/results_oficiais/`.
+
+### 5. (Opcional) Modo Ollama local — conformidade LGPD
+
+Em outro terminal:
+
+```bash
 ollama serve
 ollama pull llama3.2:3b
+```
 
-# No .env, mudar:
+No `.env`, ative:
+
+```bash
 LLM_PROVIDER=ollama
 ```
 
-### 6. Rodar a suite de evals
+E reinicie o Streamlit. O sistema passa a rodar 100% local — dados nunca saem do dispositivo.
+
+### 6. (Opcional) Ativar observabilidade LangSmith
+
+No `.env`, adicione:
 
 ```bash
-blua-eval
-# Gera evals/sprint2_results.json + gráficos em docs/img/
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=<sua_key>
+LANGCHAIN_PROJECT=bluadiagnostics-sprint2
 ```
 
-### 7. Rodar testes (bônus)
-
-```bash
-pytest tests/ -v
-pytest --cov=src tests/  # com cobertura
-```
+Crie a key gratuita em [smith.langchain.com](https://smith.langchain.com). Quota: 5k traces/mês.
 
 ---
 
@@ -174,124 +189,143 @@ pytest --cov=src tests/  # com cobertura
 ```
 bluadiagnostics/
 ├── README.md
-├── pyproject.toml             # dependências + scripts CLI
 ├── requirements.txt
-├── .env.example               # placeholders OBVIAMENTE fake
-├── .gitignore                 # blindado contra vazamento de chaves
+├── pytest.ini
+├── .env.example
+├── entrega_sprint2.txt              # documento de entrega
 ├── src/
-│   ├── config.py              # único ponto de leitura de env vars
+│   ├── config.py                    # leitura de env vars (load_dotenv)
 │   ├── agents/
-│   │   ├── supervisor.py      # roteador central
-│   │   ├── triagem.py         # check-up digital
-│   │   ├── prescricao.py      # prescrição com HITL
-│   │   └── escalada.py        # escalada humana imediata
-│   ├── tools/
+│   │   ├── supervisor.py            # classificação híbrida em 5 etapas
+│   │   ├── triagem.py               # tool loop + detector de tool leak
+│   │   ├── prescricao.py            # tool loop + saída JSON estruturada
+│   │   ├── escalada.py              # template determinístico (SAMU/CVV)
+│   │   └── fora_escopo.py           # template determinístico
+│   ├── tools/                       # 5 tools com function calling
 │   │   ├── consultar_historico.py
 │   │   ├── verificar_interacoes.py
 │   │   ├── agendar_teleconsulta.py
-│   │   ├── buscar_conhecimento.py     # RAG como tool
-│   │   └── consultar_wearables.py     # BÔNUS
-│   ├── rag/
-│   │   ├── ingest.py          # chunking + embeddings + persist
-│   │   └── retriever.py       # interface de consulta
-│   ├── graph/
-│   │   ├── state.py           # TypedDict BluaState
-│   │   └── builder.py         # monta StateGraph
+│   │   ├── consultar_wearables.py   # BÔNUS Apple HealthKit
+│   │   ├── buscar_conhecimento.py   # RAG como tool
+│   │   └── __init__.py              # registry + dispatch
 │   ├── guardrails/
-│   │   ├── red_flags.py
-│   │   ├── scope.py
-│   │   └── moderation.py
+│   │   ├── moderation.py            # anti-jailbreak (6 categorias)
+│   │   ├── red_flags.py             # rule + LLM (8 categorias)
+│   │   └── scope.py                 # rule + LLM
+│   ├── rag/
+│   │   ├── ingest.py
+│   │   └── retriever.py
+│   ├── graph/
+│   │   ├── state.py                 # BluaState TypedDict
+│   │   └── builder.py               # StateGraph + invoke_with_message
 │   ├── prompts/
-│   │   ├── system_prompts.py  # versionado como código
-│   │   └── few_shots.py
+│   │   └── system_prompts.py        # versionados como código
 │   ├── providers/
-│   │   └── llm_provider.py    # Groq ↔ Ollama
-│   └── observability/
-│       └── tracing.py         # logs JSONL + LangSmith
+│   │   └── llm_provider.py          # GroqProvider + OllamaProvider + factory
+│   ├── observability/
+│   │   ├── tracer.py                # JSONL local (11 event types)
+│   │   └── langsmith_config.py      # SaaS via env vars
+│   └── ui/
+│       └── app.py                   # Streamlit
 ├── data/
-│   └── knowledge_base/        # 5 docs da Sprint 1
+│   ├── knowledge_base/              # 5 documentos clínicos
+│   └── chroma_db/                   # vector store (gerado)
 ├── evals/
-│   ├── sprint1_eval_set.json  # reusado da Sprint 1
-│   ├── sprint2_eval_set.json  # +8 casos novos (RAG, routing)
-│   ├── runner.py
-│   └── sprint2_results.json   # output do eval (commitado)
-├── app/
-│   └── streamlit_app.py
-├── notebooks/
-│   ├── sprint2_demo.ipynb
-│   └── rag_validation.ipynb
-├── tests/
-│   ├── test_tools.py
-│   ├── test_guardrails.py
-│   └── test_prompts.py
+│   ├── sprint1_eval_set.json        # 12 casos (rubrica qualitativa)
+│   ├── sprint2_eval_set.json        # 8 casos (checks programáticos)
+│   ├── runner.py                    # runner unificado (2 modos)
+│   └── results_oficiais/            # resultados finais preservados
+├── tests/                           # 92 testes pytest
+├── scripts/
+│   ├── launch_ui.sh
+│   ├── run_evals.sh
+│   ├── run_tests.sh
+│   └── test_langsmith.py
 └── docs/
-    ├── arquitetura_sprint2.svg
-    ├── relatorio_final.md
-    └── relatorio_final.pdf    # ABNT LaTeX
+    ├── relatorio_final.pdf          # 18 páginas, ABNT (capa + folha de rosto)
+    ├── relatorio_final.md           # fonte markdown
+    ├── relatorio_corpo.md           # corpo sem cabeçalho (regeração PDF)
+    ├── template_abnt.tex            # template LaTeX
+    ├── roteiro_video.md             # roteiro de demonstração
+    ├── observabilidade.md
+    ├── ollama_lgpd.md
+    ├── evals_methodology.md
+    └── evals_iteracoes.md           # log de auditoria das iterações
 ```
 
 ---
 
 ## Bônus implementados
 
+Todos os 5 bônus do briefing implementados e validados.
+
 | Bônus | Status | Como verificar |
 |---|---|---|
-| **3+ agentes especializados** | ✅ 4 agentes | Diagrama acima + `src/agents/` |
-| **Ollama local (LGPD)** | 🚧 Dia 6-7 | `LLM_PROVIDER=ollama` no `.env` |
-| **Observabilidade** | 🚧 Dia 8-9 | LangSmith traces no vídeo + `logs/trajectories.jsonl` |
-| **Wearables mockados** | 🚧 Dia 5-6 | Tool `consultar_wearables` em `src/tools/` |
-| **Prompting avançado** | 🚧 Dia 3-10 | Few-shot + chain-of-thought em `src/prompts/` |
-| **Testes unitários** | 🚧 Dia 6-7 | `pytest tests/ --cov=src` |
-
-> 🚧 = em desenvolvimento. Atualizar para ✅ conforme as fases forem completadas.
-
----
-
-## Iterações de prompt
-
-> **Critério explícito do briefing**: documentar iterações feitas e ganho de performance em cada uma.
-
-| Iteração | Mudança | Score eval set | Observação |
-|---|---|---|---|
-| v1.0 | Baseline Sprint 1 | _(a medir)_ | System prompt monolítico |
-| v1.1 | Few-shot supervisor | _(a medir)_ | +6 exemplos cobrindo as 4 intents |
-| v1.2 | Chain-of-thought triagem | _(a medir)_ | "Pense passo a passo" antes de responder |
-| v1.3 | Disclaimer estruturado | _(a medir)_ | Bloco fixo no final de toda resposta clínica |
-| v1.4 | _A definir após primeira rodada de evals_ | | |
+| **3+ agentes especializados** | ✅ 5 agentes | `src/agents/` + diagrama acima |
+| **Wearables (Apple HealthKit)** | ✅ | `src/tools/consultar_wearables.py` |
+| **Ollama local — LGPD** | ✅ | `LLM_PROVIDER=ollama` no `.env` + `docs/ollama_lgpd.md` |
+| **Testes unitários pytest** | ✅ 92 testes | `pytest tests/` (4s, cobertura 52%) |
+| **Observabilidade LangSmith** | ✅ | `LANGCHAIN_TRACING_V2=true` + `docs/observabilidade.md` |
 
 ---
 
 ## Resultados dos evals
 
-> 🚧 Será preenchido no Dia 10 da Sprint 2. Output completo em [`evals/sprint2_results.json`](evals/sprint2_results.json).
+Sistema avaliado em duas camadas: **rubrica qualitativa** (Sprint 1, LLM-as-judge com fallback determinístico para conteúdo sensível) e **checks programáticos** (Sprint 2, assertions sobre estado final do grafo).
 
-### Acurácia por categoria (placeholder)
+### Acurácia global
 
-| Categoria | N casos | Acertos | Acurácia |
+| Suite | Modo | Acertos | Acurácia |
 |---|---|---|---|
-| happy_path | 4 | – | – |
-| red_flag | 3 | – | – |
-| jailbreak | 3 | – | – |
-| out_of_scope | 2 | – | – |
-| rag_recall | 3 | – | – |
-| routing_correto | 3 | – | – |
+| Sprint 1 | Rubrica + fallback red flag | 11 / 12 | **91,7%** |
+| Sprint 2 | Programático | 6 / 8 | **75,0%** |
 
-### Métricas agregadas (placeholder)
+### Sprint 1 — por categoria
 
-- Taxa de escalada correta: _(a medir)_
-- Tempo médio de resposta: _(a medir)_
-- Custo estimado por conversa: _(a medir)_
+| Categoria | Aprovados | Acurácia |
+|---|---|---|
+| **red_flag** (IAM, AVC, ideação suicida) | 3 / 3 | **100%** |
+| **jailbreak** | 3 / 3 | **100%** |
+| **out_of_scope** | 2 / 2 | **100%** |
+| happy_path | 3 / 4 | 75% |
+
+### Sprint 2 — por categoria
+
+| Categoria | Aprovados | Acurácia |
+|---|---|---|
+| bonus_wearables | 1 / 1 | 100% |
+| hitl | 1 / 1 | 100% |
+| routing_correto | 2 / 3 | 67% |
+| rag_recall | 2 / 3 | 67% |
+
+**Destaque**: 100% de acurácia nos critérios de segurança crítica (red flags, jailbreaks, fora-de-escopo). Os fails residuais concentram-se em RAG recall e invocação proativa de tools — limitações reconhecidas e documentadas em `docs/evals_iteracoes.md`, não falhas de segurança.
+
+JSONs completos em [`evals/results_oficiais/`](evals/results_oficiais/).
+
+---
+
+## Iterações de prompt
+
+| Versão | Mudança | Motivação |
+|---|---|---|
+| v1.0 | Baseline Sprint 1 (system prompt monolítico) | Ponto de partida |
+| v1.1 | Bloqueio anti-vazamento de tool syntax + instrução de query reformulation no RAG | Llama 3.1 8B vazava `nome_tool{...}</function>` como texto |
+| v1.2 | Detector regex de vazamento + retry com aviso explícito + sanitizer | Defesa em profundidade |
+| v1.3 | Scope ampliado com sintomas constitucionais (cansaço, fadiga, ansiedade, estresse) | Bug descoberto em eval: "cansada" classificado como fora-de-escopo |
+
+Log completo de iterações do eval set em [`docs/evals_iteracoes.md`](docs/evals_iteracoes.md) — cada ajuste com justificativa clínica/técnica.
 
 ---
 
 ## Trade-offs e limitações
 
-Documentado em [`docs/relatorio_final.md`](docs/relatorio_final.md). Resumo:
+Discutidos em profundidade no [`docs/relatorio_final.pdf`](docs/relatorio_final.pdf). Resumo:
 
-- **Llama 3.1 8B vs 3.3 70B**: 8B é mais barato e rápido mas perde precisão em casos clínicos sutis. Estratégia adotada: 8B no roteamento, 70B nas decisões críticas.
-- **ChromaDB local**: simples e gratuito, mas não escala para milhões de docs. Para produção, considerar Qdrant ou Pinecone.
-- **Mocks de tools**: tudo é simulado. Integração real com sistemas Care Plus está no roadmap pós-Sprint 2.
-- **Ollama no T430u**: limitado a modelos ≤4B params. Suficiente para PoC mas não para produção.
+- **Tamanho do eval set (20 casos)**: insuficiente para inferência estatística rigorosa. Próximo passo é expandir para 100+ casos.
+- **Viés do LLM-as-judge**: usar o mesmo modelo como juiz e como sistema introduz viés. Trabalho futuro deve usar modelo distinto (ex: GPT-4o) como juiz.
+- **RAG recall (67%)**: estratégia de RAG-como-ferramenta deixa a recuperação dependente da query formulada pelo LLM. Mantida visível nos resultados em vez de mascarada.
+- **Latência do Ollama local**: 30-118x mais lento que Groq em CPU. Inviável como padrão; requer GPU para produção.
+- **Function calling em modelo 8B**: o Llama 3.1 8B não invoca tools com a confiabilidade de modelos maiores. Mitigado com detector de vazamento + retry + sanitizer.
 
 ---
 
@@ -308,10 +342,10 @@ Professor: Jorge Luiz Gomes
 | Maykon Santana Fonseca | 567041 |
 | Nicolas Sakaue Nishimura | 567752 |
 
-**Mantenedor do repositório**: [@lincoln743](https://github.com/lincoln743) · lincoln743@gmail.com
+Mantenedor: [@lincoln743](https://github.com/lincoln743) · lincoln743@gmail.com
 
 ---
 
 ## Licença
 
-Projeto acadêmico — uso educacional. Care Plus, Bupa, e marcas associadas pertencem a seus respectivos titulares.
+Projeto acadêmico — uso educacional. Care Plus, Bupa e marcas associadas pertencem a seus respectivos titulares.
