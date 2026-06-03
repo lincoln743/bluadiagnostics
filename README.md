@@ -15,12 +15,13 @@
 1. [O que é](#o-que-é)
 2. [Arquitetura](#arquitetura)
 3. [Como executar](#como-executar)
-4. [Estrutura do repositório](#estrutura-do-repositório)
-5. [Bônus implementados](#bônus-implementados)
-6. [Resultados dos evals](#resultados-dos-evals)
-7. [Iterações de prompt](#iterações-de-prompt)
-8. [Trade-offs e limitações](#trade-offs-e-limitações)
-9. [Equipe](#equipe)
+4. [Comandos multiplataforma](#comandos-multiplataforma)
+5. [Estrutura do repositório](#estrutura-do-repositório)
+6. [Bônus implementados](#bônus-implementados)
+7. [Resultados dos evals](#resultados-dos-evals)
+8. [Iterações de prompt](#iterações-de-prompt)
+9. [Trade-offs e limitações](#trade-offs-e-limitações)
+10. [Equipe](#equipe)
 
 ---
 
@@ -181,6 +182,38 @@ LANGCHAIN_PROJECT=bluadiagnostics-sprint2
 ```
 
 Crie a key gratuita em [smith.langchain.com](https://smith.langchain.com). Quota: 5k traces/mês.
+
+---
+
+## Comandos multiplataforma
+
+Os scripts em `scripts/*.sh` foram escritos para **bash** (Linux/macOS). Para rodar no **Windows**, use uma das opções abaixo — ambas funcionam igual.
+
+### 🪟 Windows
+
+**Opção A — Git Bash (recomendado).** Se você instalou o Git for Windows, já tem o Git Bash. Abra "Git Bash Here" na pasta do projeto e use os mesmos comandos `bash scripts/X.sh` mostrados acima.
+
+**Opção B — cmd ou PowerShell.** Use o comando Python direto, que dispensa o shell wrapper:
+
+| Tarefa | Linux/macOS | Windows (cmd/PowerShell) |
+|---|---|---|
+| Ativar venv | `source .venv/bin/activate` | `.venv\Scripts\activate` |
+| Popular RAG | `python -m src.rag.ingest` | `python -m src.rag.ingest` |
+| Rodar UI | `bash scripts/launch_ui.sh` | `streamlit run src/ui/app.py` |
+| Rodar evals (Sprint 2) | `bash scripts/run_evals.sh --sprint2` | `python -m evals.runner --sprint2` |
+| Rodar evals (Sprint 1) | `bash scripts/run_evals.sh --sprint1` | `python -m evals.runner --sprint1` |
+| Rodar evals (ambos) | `bash scripts/run_evals.sh` | `python -m evals.runner --all` |
+| Rodar testes | `pytest tests/` | `pytest tests/` |
+
+**Opção C — WSL.** Se tiver WSL instalado, abra o terminal Ubuntu e use os comandos Linux idênticos.
+
+### 🍎 macOS / 🐧 Linux
+
+Comandos `bash scripts/X.sh` funcionam nativamente. Se preferir, os comandos Python equivalentes da tabela acima também funcionam — são portáveis.
+
+### Resumo
+
+Os comandos `python -m ...` da coluna Windows são **universais**: funcionam em qualquer SO que tenha Python instalado. Se em dúvida sobre qual usar, prefira-os — não dependem de bash nem de permissões de execução (`chmod +x`).
 
 ---
 
